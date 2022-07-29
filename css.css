@@ -1,0 +1,31 @@
+body {margin-top: 0px; margin-left: 0px;} /*위, 왼쪽 하얀색 마진을 없애주는 코드*/
+
+body::-webkit-scrollbar {
+    display:none;   /*스크롤바를 안보이게 하는 코드*/
+}
+#text{
+    font-size: 120px;
+    color: white;
+    position: absolute;
+    top: 20%;
+    left: 50%;
+    transform: translateX(-50%);
+}
+#text2{
+    font-size: 50px;
+    color: white;
+    position: absolute;
+    top: 40%;
+    left: 50%;
+    transform: translateX(-50%);
+}
+video{
+    position : fixed;
+	top : 0; 
+	left : 0;
+	min-width:100%;
+	min-height :100%;
+	width:auto;
+	height:auto;
+	z-index : -1;
+}
