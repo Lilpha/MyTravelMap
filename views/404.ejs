@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>페이지를 찾을 수 없습니다 - MyTravelMap</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+    <header class="navbar">
+        <div class="container">
+            <h1>🌍 MyTravelMap</h1>
+            <nav>
+                <a href="/" class="nav-link">홈</a>
+                <a href="/add" class="nav-link">+ 여행 추가</a>
+            </nav>
+        </div>
+    </header>
+
+    <main class="container">
+        <div class="error-page">
+            <h1>404</h1>
+            <p>죄송합니다. 요청하신 여행을 찾을 수 없습니다.</p>
+            <p class="error-id">ID: <%= id %></p>
+            <a href="/" class="btn btn-primary">← 홈으로 돌아가기</a>
+        </div>
+    </main>
+
+    <footer class="footer">
+        <p>&copy; 2025 MyTravelMap. 모든 여행의 기억을 지도에 담다.</p>
+    </footer>
+</body>
+</html>

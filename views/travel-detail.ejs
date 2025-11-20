@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><%= travel.title %> - MyTravelMap</title>
+    <script type="text/javascript" src="https://oapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=dnehqru9x2"></script>
+    <style>
+        /* 캐러셀 스타일 */
+        .carousel-container {
+            position: relative;
+            width: 200px;
+            height: auto;
+        }
+
+        .carousel-wrapper {
+            overflow: hidden;
+            border-radius: 4px;
+            background: #f0f0f0;
+        }
+
+        .carousel-track {
+            display: flex;
+            transition: transform 0.3s ease;
+        }
+
+        .carousel-slide {
+            flex-shrink: 0;
+            width: 200px;
+        }
+
+        .carousel-slide img,
+        .carousel-slide video {
+            width: 100%;
+            height: 150px;
+            object-fit: cover;
+            display: block;
+        }
+
+        .carousel-nav {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 4px;
+            gap: 4px;
+        }
+
+        .carousel-btn {
+            background: #2196F3;
+            color: white;
+            border: none;
+            padding: 4px 8px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 12px;
+            flex: 1;
+        }
+
+        .carousel-btn:hover {
+            background: #1976D2;
+        }
+
+        .carousel-counter {
+            font-size: 11px;
+            color: #666;
+            text-align: center;
+            padding: 4px;
+            background: #f9f9f9;
+            border-radius: 3px;
+            min-width: 40px;
+        }
+
+        .carousel-info {
+            font-size: 12px;
+            color: #666;
+            margin-top: 6px;
+            text-align: center;
+            max-width: 200px;
+            word-break: break-word;
+        }
+
+        /* InfoWindow 스타일 */
+        .naver-infowindow {
+            pointer-events: auto !important;
+        }
+
+        .naver-infowindow-content {
+            pointer-events: auto !important;
+        }
+    </style>
+<body>
+    <header class="navbar">
+        <div class="container">
+            <h1>🌍 MyTravelMap</h1>
+            <nav>
+                <a href="/" class="nav-link">홈</a>
+                <a href="/add" class="nav-link">+ 여행 추가</a>
+            </nav>
+        </div>
+    </header>
+
+    <main class="container">
+        <div class="travel-detail-wrapper">
+            <!-- 왼쪽: 지도 -->
+            <section class="detail-map-section">
+                <div id="map" style="width: 100%; height: 500px;"></div>
+                <% if (travel.latitude && travel.longitude) { %>
+                    <div class="coordinates">
+                        <p>📍 <%= travel.latitude.toFixed(4) %>, <%= travel.longitude.toFixed(4) %></p>
+                    </div>
+                <% } %>
+            </section>
+
+            <!-- 오른쪽: 상세 정보 -->
+            <section class="detail-info-section">
+                <div class="detail-header">
+                    <h1><%= travel.title %></h1>
+                    <a href="/" class="btn btn-secondary">← 목록으로</a>
+                </div>
+
+                <div class="detail-meta">
+                    <span class="meta-item">📅 <%= travel.uploadDate %></span>
+                    <% if (travel.tags && travel.tags.length > 0) { %>
+                        <div class="tags">
+                            <% travel.tags.forEach(tag => { %>
+                                <span class="tag">#<%= tag %></span>
+                            <% }); %>
+                        </div>
+                    <% } %>
+                </div>
+
+                <div class="detail-description" style="display: none;">
+                    <h3>설명</h3>
+                    <p><%= travel.description %></p>
+                </div>
+
+                <!-- 미디어 갤러리 -->
+                <% if (travel.media && travel.media.length > 0) { %>
+                    <div class="media-gallery" style="display: none;">
+                        <h3>사진 & 영상</h3>
+                        <div class="gallery-grid">
+                            <% travel.media.forEach(file => { %>
+                                <div class="gallery-item">
+                                    <% if (file.type.startsWith('image/')) { %>
+                                        <img src="<%= file.path %>" alt="<%= file.originalName %>" class="gallery-media">
+                                    <% } else if (file.type.startsWith('video/')) { %>
+                                        <video controls class="gallery-media">
+                                            <source src="<%= file.path %>" type="<%= file.type %>">
+                                            브라우저가 영상을 지원하지 않습니다.
+                                        </video>
+                                    <% } %>
+                                    <p class="file-name"><%= file.originalName %></p>
+                                </div>
+                            <% }); %>
+                        </div>
+                    </div>
+                <% } %>
+
+                <div class="detail-actions">
+                    <button onclick="deleteTravel('<%= travel.id %>')" class="btn btn-danger">🗑 삭제</button>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <footer class="footer">
+        <p>&copy; 2025 MyTravelMap. 모든 여행의 기억을 지도에 담다.</p>
+    </footer>
+
+    <script>
+        // GPS 기반 이미지 그룹화 (거리 기준: 0.0005도 ≈ 50m)
+        const DISTANCE_THRESHOLD = 0.0005;
+
+        function getImageGroups() {
+            const media = <%- JSON.stringify(travel.media || []) %>;
+            const groups = [];
+
+            console.log('📊 총 이미지:', media.length);
+            console.log('📷 이미지 데이터:', media);
+
+            media.forEach((file, idx) => {
+                // GPS 데이터 있는 이미지만 처리
+                if (!file.latitude || !file.longitude) {
+                    console.warn(`⚠️ ${idx}번 이미지: GPS 데이터 없음`);
+                    return;
+                }
+
+                console.log(`✓ ${idx}번 이미지: GPS (${file.latitude}, ${file.longitude})`);
+
+                // 기존 그룹 찾기
+                const existingGroup = groups.find(group => {
+                    const refLat = group[0].latitude;
+                    const refLon = group[0].longitude;
+                    const latDiff = Math.abs(file.latitude - refLat);
+                    const lonDiff = Math.abs(file.longitude - refLon);
+                    
+                    return latDiff < DISTANCE_THRESHOLD && lonDiff < DISTANCE_THRESHOLD;
+                });
+
+                if (existingGroup) {
+                    console.log(`➕ ${idx}번 이미지를 기존 그룹에 추가`);
+                    existingGroup.push(file);
+                } else {
+                    console.log(`🆕 ${idx}번 이미지로 새 그룹 생성`);
+                    groups.push([file]);
+                }
+            });
+
+            console.log(`📍 총 마커 그룹: ${groups.length}개`);
+            return groups;
+        }
+
+        function createCarouselHTML(imageGroup, groupIdx) {
+            let html = `<div class="carousel-container">`;
+            html += `<div class="carousel-wrapper">`;
+            html += `<div class="carousel-track" id="carousel-${groupIdx}">`;
+
+            imageGroup.forEach((file, idx) => {
+                html += `<div class="carousel-slide" id="slide-${groupIdx}-${idx}">`;
+                if (file.type && file.type.startsWith('image/')) {
+                    html += `<img src="${file.path}" alt="${file.originalName}">`;
+                } else if (file.type && file.type.startsWith('video/')) {
+                    html += `<video style="width:100%; height:150px; object-fit:cover;"><source src="${file.path}" type="${file.type}"></video>`;
+                }
+                html += `</div>`;
+            });
+
+            html += `</div></div>`;
+
+            // 네비게이션
+            if (imageGroup.length > 1) {
+                html += `<div class="carousel-nav">`;
+                html += `<button class="carousel-btn" onclick="carouselPrev(${groupIdx})">← 이전</button>`;
+                html += `<div class="carousel-counter"><span id="counter-${groupIdx}">1</span>/${imageGroup.length}</div>`;
+                html += `<button class="carousel-btn" onclick="carouselNext(${groupIdx}, ${imageGroup.length})">다음 →</button>`;
+                html += `</div>`;
+            }
+
+            // 파일 정보
+            html += `<div class="carousel-info" id="info-${groupIdx}">`;
+            html += `${imageGroup[0].originalName}`;
+            html += `</div>`;
+
+            return html;
+        }
+
+        function carouselNext(groupIdx, maxSlides) {
+            const track = document.getElementById(`carousel-${groupIdx}`);
+            let currentSlide = track.dataset.currentSlide || 0;
+            currentSlide = parseInt(currentSlide) + 1;
+
+            if (currentSlide >= maxSlides) {
+                currentSlide = 0;
+            }
+
+            track.dataset.currentSlide = currentSlide;
+            const offset = currentSlide * -200;
+            track.style.transform = `translateX(${offset}px)`;
+            
+            document.getElementById(`counter-${groupIdx}`).textContent = currentSlide + 1;
+            
+            // 파일명 업데이트
+            const imageGroup = getImageGroups()[groupIdx];
+            document.getElementById(`info-${groupIdx}`).textContent = imageGroup[currentSlide].originalName;
+        }
+
+        function carouselPrev(groupIdx) {
+            const track = document.getElementById(`carousel-${groupIdx}`);
+            let currentSlide = track.dataset.currentSlide || 0;
+            currentSlide = parseInt(currentSlide) - 1;
+
+            if (currentSlide < 0) {
+                const imageGroup = getImageGroups()[groupIdx];
+                currentSlide = imageGroup.length - 1;
+            }
+
+            track.dataset.currentSlide = currentSlide;
+            const offset = currentSlide * -200;
+            track.style.transform = `translateX(${offset}px)`;
+            
+            document.getElementById(`counter-${groupIdx}`).textContent = currentSlide + 1;
+            
+            // 파일명 업데이트
+            const imageGroup = getImageGroups()[groupIdx];
+            document.getElementById(`info-${groupIdx}`).textContent = imageGroup[currentSlide].originalName;
+        }
+
+        // 지도 초기화
+        const mapDiv = document.getElementById('map');
+        const mapOptions = {
+            center: new naver.maps.LatLng(<%= travel.latitude || 37.3595704 %>, <%= travel.longitude || 127.105399 %>),
+            zoom: <%= travel.latitude && travel.longitude ? 14 : 12 %>
+        };
+        const map = new naver.maps.Map(mapDiv, mapOptions);
+
+        // 여행 메인 마커
+        <% if (travel.latitude && travel.longitude) { %>
+            const mainMarker = new naver.maps.Marker({
+                position: new naver.maps.LatLng(<%= travel.latitude %>, <%= travel.longitude %>),
+                map: map,
+                title: '<%= travel.title %>',
+                icon: {
+                    url: 'https://maps.google.com/mapfiles/ms/icons/red-dot.png',
+                    size: new naver.maps.Size(32, 32),
+                    scaledSize: new naver.maps.Size(32, 32)
+                }
+            });
+
+            // 정보 윈도우
+            const infoWindow = new naver.maps.InfoWindow({
+                content: `
+                    <div style="padding: 10px; font-weight: bold;">
+                        <%= travel.title %>
+                    </div>
+                `,
+                backgroundColor: '#ffffff',
+                borderColor: '#4CAF50',
+                borderWidth: 2
+            });
+            infoWindow.open(map, mainMarker);
+        <% } %>
+
+        // GPS 기반 이미지 그룹화하여 마커 추가
+        const imageGroups = getImageGroups();
+        console.log('🗺️ 지도 마커 생성 시작...', imageGroups.length, '개 그룹');
+
+        let activeInfoWindow = null;
+        let mouseOverMarker = false;
+        let mouseOverPopup = false;
+        let popupCloseTimer = null;
+
+        imageGroups.forEach((group, groupIdx) => {
+            const firstImage = group[0];
+            
+            console.log(`📌 그룹 ${groupIdx}: ${group.length}개 이미지, 위치(${firstImage.latitude}, ${firstImage.longitude})`);
+            
+            const groupMarker = new naver.maps.Marker({
+                position: new naver.maps.LatLng(firstImage.latitude, firstImage.longitude),
+                map: map,
+                title: `${group.length}개 사진`,
+                icon: {
+                    url: 'https://maps.google.com/mapfiles/ms/icons/blue-dot.png',
+                    size: new naver.maps.Size(24, 24),
+                    scaledSize: new naver.maps.Size(24, 24)
+                }
+            });
+
+            // 캐러셀이 포함된 정보 윈도우
+            const carouselHTML = createCarouselHTML(group, groupIdx);
+            const groupInfoWindow = new naver.maps.InfoWindow({
+                content: `
+                    <div style="padding: 8px; text-align: center;" id="popup-${groupIdx}" class="info-popup">
+                        <p style="margin: 0 0 8px 0; font-weight: bold; font-size: 14px;">📍 ${group.length}개 사진</p>
+                        ${carouselHTML}
+                    </div>
+                `,
+                backgroundColor: '#ffffff',
+                borderColor: '#2196F3',
+                borderWidth: 2
+            });
+
+            function closePopup() {
+                if (!mouseOverMarker && !mouseOverPopup) {
+                    groupInfoWindow.close();
+                    activeInfoWindow = null;
+                }
+            }
+
+            // 마커 클릭 이벤트
+            naver.maps.Event.addListener(groupMarker, 'click', function() {
+                console.log(`클릭: 그룹 ${groupIdx}`);
+                if (activeInfoWindow && activeInfoWindow !== groupInfoWindow) {
+                    activeInfoWindow.close();
+                }
+                groupInfoWindow.open(map, groupMarker);
+                activeInfoWindow = groupInfoWindow;
+            });
+
+            // 마커 마우스 오버 시 정보 표시
+            naver.maps.Event.addListener(groupMarker, 'mouseover', function() {
+                console.log(`Hover: 그룹 ${groupIdx}`);
+                mouseOverMarker = true;
+                clearTimeout(popupCloseTimer);
+                
+                if (activeInfoWindow && activeInfoWindow !== groupInfoWindow) {
+                    activeInfoWindow.close();
+                }
+                groupInfoWindow.open(map, groupMarker);
+                activeInfoWindow = groupInfoWindow;
+            });
+
+            // 마커 마우스 아웃 시
+            naver.maps.Event.addListener(groupMarker, 'mouseout', function() {
+                mouseOverMarker = false;
+                popupCloseTimer = setTimeout(closePopup, 200);
+            });
+        });
+
+        // Popup에 마우스 진입하면 열린 상태 유지
+        document.addEventListener('mouseover', function(e) {
+            if (e.target.closest('.info-popup') || e.target.closest('.naver-infowindow')) {
+                mouseOverPopup = true;
+                clearTimeout(popupCloseTimer);
+            }
+        });
+
+        // Popup에서 마우스 나가면 닫기
+        document.addEventListener('mouseout', function(e) {
+            if (e.target.closest('.info-popup') || e.target.closest('.naver-infowindow')) {
+                mouseOverPopup = false;
+                popupCloseTimer = setTimeout(() => {
+                    if (!mouseOverMarker && !mouseOverPopup && activeInfoWindow) {
+                        activeInfoWindow.close();
+                        activeInfoWindow = null;
+                    }
+                }, 200);
+            }
+        });
+
+        // 삭제 함수
+        function deleteTravel(id) {
+            if (confirm('정말 이 여행을 삭제하시겠습니까?')) {
+                fetch(`/api/travel/${id}`, {
+                    method: 'DELETE'
+                })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.success) {
+                        alert('여행이 삭제되었습니다.');
+                        window.location.href = '/';
+                    }
+                })
+                .catch(err => alert('삭제 중 오류가 발생했습니다.'));
+            }
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>새로운 여행 기록 - MyTravelMap</title>
+    <script type="text/javascript" src="https://oapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=dnehqru9x2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/exif-js@2.3.0/exif.js"></script>
+    <link rel="stylesheet" href="/css/style.css">
+    <style>
+        .step-indicator {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 30px;
+            position: relative;
+        }
+
+        .step-indicator::before {
+            content: '';
+            position: absolute;
+            top: 20px;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background-color: #ddd;
+            z-index: 0;
+        }
+
+        .step {
+            flex: 1;
+            text-align: center;
+            position: relative;
+            z-index: 1;
+        }
+
+        .step-number {
+            width: 40px;
+            height: 40px;
+            background-color: white;
+            border: 2px solid #ddd;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 10px;
+            font-weight: bold;
+            color: #ddd;
+            transition: all 0.3s;
+        }
+
+        .step.active .step-number {
+            background-color: #4CAF50;
+            border-color: #4CAF50;
+            color: white;
+        }
+
+        .step.completed .step-number {
+            background-color: #4CAF50;
+            border-color: #4CAF50;
+            color: white;
+        }
+
+        .step-label {
+            font-size: 13px;
+            color: #ddd;
+            transition: all 0.3s;
+        }
+
+        .step.active .step-label,
+        .step.completed .step-label {
+            color: #4CAF50;
+            font-weight: 600;
+        }
+
+        .form-step {
+            display: none;
+        }
+
+        .form-step.active {
+            display: block;
+            animation: fadeIn 0.3s;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        .location-info {
+            background-color: #f0f8f0;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border-left: 4px solid #4CAF50;
+        }
+
+        .photos-grid-info {
+            background-color: #e3f2fd;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border-left: 4px solid #2196F3;
+        }
+
+        .ai-title-section {
+            background-color: #fff3cd;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border-left: 4px solid #ff9800;
+        }
+
+        .ai-title-section h3 {
+            margin-bottom: 15px;
+            color: #ff6f00;
+        }
+
+        .ai-title-input {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #ff9800;
+            border-radius: 4px;
+            font-size: 16px;
+            margin-bottom: 10px;
+            background-color: white;
+        }
+
+        .ai-title-suggestions {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .suggestion-btn {
+            padding: 10px;
+            background-color: white;
+            border: 1px solid #ff9800;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-size: 12px;
+        }
+
+        .suggestion-btn:hover {
+            background-color: #ff9800;
+            color: white;
+        }
+
+        .step-buttons {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+            margin-top: 30px;
+        }
+
+        .btn-nav {
+            padding: 12px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+
+        .btn-prev {
+            background-color: #ddd;
+            color: #333;
+        }
+
+        .btn-prev:hover {
+            background-color: #ccc;
+        }
+
+        .btn-next {
+            background-color: #4CAF50;
+            color: white;
+        }
+
+        .btn-next:hover {
+            background-color: #45a049;
+        }
+
+        .btn-next:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #4CAF50;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-left: 10px;
+            vertical-align: middle;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <header class="navbar">
+        <div class="container">
+            <h1>🌍 MyTravelMap</h1>
+            <nav>
+                <a href="/" class="nav-link">홈</a>
+                <a href="/add" class="nav-link active">+ 여행 추가</a>
+            </nav>
+        </div>
+    </header>
+
+    <main class="container">
+        <div class="add-travel-wrapper">
+            <!-- 진행 상태 표시 -->
+            <div class="step-indicator">
+                <div class="step completed" data-step="1">
+                    <div class="step-number">✓</div>
+                    <div class="step-label">위치 선택</div>
+                </div>
+                <div class="step active" data-step="2">
+                    <div class="step-number">2</div>
+                    <div class="step-label">사진 업로드</div>
+                </div>
+                <div class="step" data-step="3">
+                    <div class="step-number">3</div>
+                    <div class="step-label">제목 생성</div>
+                </div>
+                <div class="step" data-step="4">
+                    <div class="step-number">4</div>
+                    <div class="step-label">저장</div>
+                </div>
+            </div>
+
+            <form id="travelForm" enctype="multipart/form-data">
+                <!-- Step 1: 위치 선택 -->
+                <div class="form-step" id="step1">
+                    <h2>📍 Step 1: 여행지 위치 선택</h2>
+                    <p style="color: #666; margin-bottom: 20px;">여행한 위치를 지도에서 선택해주세요</p>
+                    
+                    <div class="map-section">
+                        <div id="map" style="width: 100%; height: 400px; border-radius: 8px;"></div>
+                    </div>
+
+                    <div class="location-info" style="margin-top: 20px;">
+                        <strong>선택된 위치:</strong>
+                        <div id="locationDisplay" style="margin-top: 10px; color: #2e7d32;">
+                            위치를 선택하세요
+                        </div>
+                        <input type="hidden" id="latitude" name="latitude">
+                        <input type="hidden" id="longitude" name="longitude">
+                    </div>
+
+                    <div class="step-buttons">
+                        <button type="button" class="btn-nav btn-next" onclick="goToStep(2)" id="step1Next" disabled>
+                            다음 (사진 업로드) →
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Step 2: 사진 업로드 -->
+                <div class="form-step" id="step2">
+                    <h2>🎬 Step 2: 여행 사진 업로드</h2>
+                    <p style="color: #666; margin-bottom: 20px;">이 여행지에서 촬영한 모든 사진/영상을 업로드해주세요</p>
+
+                    <div class="photos-grid-info">
+                        <strong>💡 팁:</strong> GPS가 포함된 사진을 업로드하면 자동으로 위치가 감지됩니다.
+                    </div>
+
+                    <div class="form-group">
+                        <label for="media">사진/영상 (여러 개 선택 가능)</label>
+                        <div class="file-input-wrapper">
+                            <input type="file" id="media" name="media" multiple accept="image/*,video/*" required>
+                            <label for="media" class="file-label">클릭 또는 드래그 & 드롭으로 파일 선택</label>
+                        </div>
+                        <div id="filePreview" class="file-preview"></div>
+                    </div>
+
+                    <div id="exifInfo" style="display:none;"></div>
+
+                    <div class="step-buttons">
+                        <button type="button" class="btn-nav btn-prev" onclick="goToStep(1)">
+                            ← 이전 (위치 선택)
+                        </button>
+                        <button type="button" class="btn-nav btn-next" onclick="goToStep(3)" id="step2Next" disabled>
+                            다음 (제목 생성) →
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Step 3: AI 제목 생성 -->
+                <div class="form-step" id="step3">
+                    <h2>✨ Step 3: AI가 제목을 생성해드립니다</h2>
+                    <p style="color: #666; margin-bottom: 20px;">위치와 사진을 분석하여 여행의 제목을 추천합니다</p>
+
+                    <div class="ai-title-section">
+                        <h3>🤖 AI 제목 생성기</h3>
+                        <div style="display: flex; gap: 10px;">
+                            <button type="button" class="btn btn-primary" onclick="generateAITitle()" style="flex: 1;">
+                                ✨ 제목 생성하기
+                            </button>
+                            <button type="button" class="btn btn-primary" onclick="generateAITitle(true)" style="flex: 1; background-color: #2196F3;">
+                                🔄 새로 생성하기
+                            </button>
+                        </div>
+                        <div id="aiLoading" class="loading" style="display:none;"></div>
+
+                        <div style="margin-top: 20px;">
+                            <label for="title">제목 (AI 제목을 수정하거나 직접 작성해주세요)</label>
+                            <input type="text" id="title" name="title" class="ai-title-input" placeholder="예: 부산의 노을을 담다, 서울 강남 산책기" required>
+                        </div>
+
+                        <div id="aiSuggestions" class="ai-title-suggestions" style="display:none;"></div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="description">여행 설명 (선택사항)</label>
+                        <textarea id="description" name="description" placeholder="이 여행에 대해 남기고 싶은 기억이나 감정을 자유롭게 적어보세요..." rows="5"></textarea>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="tags">태그 (쉼표로 구분, 선택사항)</label>
+                        <input type="text" id="tags" name="tags" placeholder="예: 가을, 혼자여행, 감성">
+                    </div>
+
+                    <div class="step-buttons">
+                        <button type="button" class="btn-nav btn-prev" onclick="goToStep(2)">
+                            ← 이전 (사진 업로드)
+                        </button>
+                        <button type="button" class="btn-nav btn-next" onclick="goToStep(4)">
+                            다음 (저장) →
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Step 4: 최종 확인 및 저장 -->
+                <div class="form-step" id="step4">
+                    <h2>✓ Step 4: 여행 저장</h2>
+                    <p style="color: #666; margin-bottom: 20px;">모든 정보를 확인하고 저장하세요</p>
+
+                    <div id="summaryInfo" style="background-color: #f5f5f5; padding: 20px; border-radius: 8px; margin-bottom: 20px;"></div>
+
+                    <div class="step-buttons">
+                        <button type="button" class="btn-nav btn-prev" onclick="goToStep(3)">
+                            ← 이전 (제목 생성)
+                        </button>
+                        <button type="submit" class="btn-nav btn-next" style="background-color: #4CAF50; color: white;">
+                            ✓ 여행 저장하기
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </main>
+
+    <footer class="footer">
+        <p>&copy; 2025 MyTravelMap. 모든 여행의 기억을 지도에 담다.</p>
+    </footer>
+
+    <script src="/js/travel-add.js"></script>
+</body>
+</html>

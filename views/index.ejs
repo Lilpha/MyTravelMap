@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MyTravelMap - 여행 일기장</title>
+    <script type="text/javascript" src="https://oapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=dnehqru9x2"></script>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+    <header class="navbar">
+        <div class="container">
+            <h1>🌍 MyTravelMap</h1>
+            <nav>
+                <a href="/" class="nav-link active">홈</a>
+                <a href="/add" class="nav-link btn-add">+ 여행 추가</a>
+            </nav>
+        </div>
+    </header>
+
+    <main class="container">
+        <section class="travels-grid">
+            <% if (travels && travels.length > 0) { %>
+                <% travels.forEach(travel => { %>
+                    <div class="travel-card">
+                        <% if (travel.media && travel.media.length > 0) { %>
+                            <div class="travel-thumbnail">
+                                <img src="<%= travel.media[0].path %>" alt="<%= travel.title %>">
+                            </div>
+                        <% } else { %>
+                            <div class="travel-thumbnail placeholder">
+                                <span>📸</span>
+                            </div>
+                        <% } %>
+                        <div class="travel-info">
+                            <h3><%= travel.title %></h3>
+                            <p class="travel-description"><%= travel.description.substring(0, 50) %>...</p>
+                            <div class="travel-meta">
+                                <span class="date">📅 <%= travel.uploadDate %></span>
+                                <% if (travel.latitude && travel.longitude) { %>
+                                    <span class="location">📍 <%= travel.latitude.toFixed(4) %>, <%= travel.longitude.toFixed(4) %></span>
+                                <% } %>
+                            </div>
+                            <% if (travel.tags && travel.tags.length > 0) { %>
+                                <div class="tags">
+                                    <% travel.tags.forEach(tag => { %>
+                                        <span class="tag">#<%= tag %></span>
+                                    <% }); %>
+                                </div>
+                            <% } %>
+                            <a href="/travel/<%= travel.id %>" class="btn-link">상세 보기</a>
+                        </div>
+                    </div>
+                <% }); %>
+            <% } else { %>
+                <div class="no-travels">
+                    <p>아직 여행 기록이 없습니다.</p>
+                    <a href="/add" class="btn btn-primary">첫 번째 여행 추가하기</a>
+                </div>
+            <% } %>
+        </section>
+    </main>
+
+    <footer class="footer">
+        <p>&copy; 2025 MyTravelMap. 모든 여행의 기억을 지도에 담다.</p>
+    </footer>
+
+    <script src="/js/main.js"></script>
+</body>
+</html>
