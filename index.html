@@ -1,21 +1,504 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="stylesheet" href="css.css">
-    <title>MyTravelMap</title>
-</head>
-<body>
-    <div>
-        <p id ="text"> My Travel Map</p>
-        <p id ="text2"> 아래로 드래그해 시작</p>
-        <video  loop autoplay muted>
-        <source src="Tokyo vid.mp4"  type="video/mp4">
-    </video>
+    <title>MyTravelMap - 여행 일기장</title>
+    <script type="text/javascript" src="https://oapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=dnehqru9x2"></script>
+    <!-- EXIF 데이터 추출 라이브러리 -->
+    <script src="https://cdn.jsdelivr.net/npm/exif-js@2.3.0/exif.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
 
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            height: 100vh;
+            overflow: hidden;
+            background-color: #f5f5f5;
+        }
+
+        .container {
+            display: flex;
+            height: 100vh;
+        }
+
+        /* 왼쪽: 네이버 지도 */
+        .map-section {
+            flex: 1;
+            position: relative;
+            box-shadow: 2px 0 8px rgba(0, 0, 0, 0.1);
+        }
+
+        #map {
+            width: 100%;
+            height: 100%;
+        }
+
+        /* 오른쪽: 이미지 목록 */
+        .image-section {
+            width: 400px;
+            background-color: white;
+            border-left: 1px solid #ddd;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .image-section-header {
+            padding: 20px;
+            border-bottom: 1px solid #ddd;
+            background-color: #f9f9f9;
+        }
+
+        .image-section-header h2 {
+            font-size: 18px;
+            margin-bottom: 12px;
+            color: #333;
+        }
+
+        .upload-btn {
+            width: 100%;
+            padding: 10px 15px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: bold;
+            transition: background-color 0.3s;
+        }
+
+        .upload-btn:hover {
+            background-color: #45a049;
+        }
+
+        #fileInput {
+            display: none;
+        }
+
+        /* 이미지 목록 스크롤 영역 */
+        .image-list-container {
+            flex: 1;
+            overflow-y: auto;
+            padding: 15px;
+        }
+
+        .image-item {
+            margin-bottom: 15px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            overflow: hidden;
+            background-color: #fff;
+            transition: transform 0.2s, box-shadow 0.2s;
+            cursor: pointer;
+        }
+
+        .image-item:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+
+        .image-thumbnail {
+            width: 100%;
+            height: 200px;
+            object-fit: cover;
+            background-color: #e0e0e0;
+        }
+
+        .image-info {
+            padding: 12px;
+            background-color: #fafafa;
+        }
+
+        .image-title {
+            font-weight: bold;
+            font-size: 14px;
+            color: #333;
+            margin-bottom: 5px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .image-date {
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 5px;
+        }
+
+        .image-location {
+            font-size: 12px;
+            color: #0066cc;
+            margin-bottom: 5px;
+        }
+
+        .image-location.no-location {
+            color: #999;
+            font-style: italic;
+        }
+
+        .gps-badge {
+            display: inline-block;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 11px;
+            font-weight: bold;
+            margin-left: 5px;
+        }
+
+        .gps-badge.detected {
+            background-color: #c8e6c9;
+            color: #2e7d32;
+        }
+
+        .gps-badge.not-detected {
+            background-color: #ffccbc;
+            color: #d84315;
+        }
+
+        .image-item.active {
+            border-color: #4CAF50;
+            background-color: #f0f8f0;
+        }
+
+        /* 마커 정보 팝업 */
+        .marker-info-popup {
+            min-width: 200px;
+            padding: 12px;
+        }
+
+        .marker-info-popup h3 {
+            margin-bottom: 8px;
+            font-size: 14px;
+            color: #333;
+        }
+
+        .marker-info-popup p {
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 4px;
+        }
+
+        /* 모바일 반응형 */
+        @media (max-width: 768px) {
+            .container {
+                flex-direction: column;
+            }
+
+            .map-section {
+                flex: 1;
+                height: 50%;
+            }
+
+            .image-section {
+                width: 100%;
+                height: 50%;
+                border-left: none;
+                border-top: 1px solid #ddd;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <!-- 왼쪽: 네이버 지도 -->
+        <div class="map-section">
+            <div id="map"></div>
+        </div>
+
+        <!-- 오른쪽: 이미지 목록 -->
+        <div class="image-section">
+            <div class="image-section-header">
+                <h2>📸 나의 여행</h2>
+                <button class="upload-btn" onclick="document.getElementById('fileInput').click()">
+                    + 이미지 업로드
+                </button>
+                <input type="file" id="fileInput" accept="image/*" multiple>
+            </div>
+            <div class="image-list-container" id="imageList">
+                <p style="color: #999; text-align: center; margin-top: 40px;">
+                    아직 업로드된 이미지가 없습니다.
+                </p>
+            </div>
+        </div>
     </div>
-    
+
+    <script>
+        // 데이터 저장소 (로컬 스토리지 활용)
+        let images = [];
+        let markers = [];
+        let currentSelectedIndex = -1;
+
+        // piexif 라이브러리 로드 대기
+        function waitForPiexif() {
+            return new Promise((resolve) => {
+                if (typeof EXIF !== 'undefined') {
+                    resolve();
+                } else {
+                    const checkInterval = setInterval(() => {
+                        if (typeof EXIF !== 'undefined') {
+                            clearInterval(checkInterval);
+                            resolve();
+                        }
+                    }, 100);
+                    // 최대 5초 대기
+                    setTimeout(() => {
+                        clearInterval(checkInterval);
+                        resolve();
+                    }, 5000);
+                }
+            });
+        }
+
+        // 1. 네이버 지도 초기화
+        const mapDiv = document.getElementById('map');
+        const mapOptions = {
+            center: new naver.maps.LatLng(37.3595704, 127.105399), // 서울 그린팩토리 기본값
+            zoom: 12
+        };
+
+        const map = new naver.maps.Map(mapDiv, mapOptions);
+
+        // 2. 파일 입력 이벤트
+        document.getElementById('fileInput').addEventListener('change', handleFileUpload);
+
+        async function handleFileUpload(event) {
+            const files = Array.from(event.target.files);
+            
+            // piexif 라이브러리 로드 대기
+            await waitForPiexif();
+            
+            for (const file of files) {
+                const reader = new FileReader();
+                
+                reader.onload = function(e) {
+                    const img = new Image();
+                    img.onload = function() {
+                        // EXIF 데이터와 이미지 메타데이터 함께 추출
+                        extractImageMetadata(file, e.target.result, img);
+                    };
+                    img.src = e.target.result;
+                };
+                
+                reader.readAsDataURL(file);
+            }
+            
+            // 파일 입력 초기화
+            event.target.value = '';
+        }
+
+        // EXIF 데이터에서 GPS 좌표 추출
+        function extractGPSFromExif(data) {
+            try {
+                // EXIF 라이브러리 확인
+                if (typeof EXIF === 'undefined') {
+                    console.warn('⚠ EXIF 라이브러리가 로드되지 않았습니다.');
+                    return null;
+                }
+
+                const exif = EXIF.getAllTags(data);
+                
+                if (!exif || !exif.GPSLatitude || !exif.GPSLongitude) {
+                    return null;
+                }
+
+                // GPS 좌표 변환 (DMS 형식 → 10진수 형식)
+                const latitude = convertDMSToDecimal(exif.GPSLatitude, exif.GPSLatitudeRef);
+                const longitude = convertDMSToDecimal(exif.GPSLongitude, exif.GPSLongitudeRef);
+
+                return { latitude, longitude };
+            } catch (e) {
+                console.log('EXIF 데이터 읽기 오류:', e);
+                return null;
+            }
+        }
+
+        // DMS (도, 분, 초) 형식을 10진수로 변환
+        function convertDMSToDecimal(dms, ref) {
+            if (!dms || !dms[0] || !dms[1] || !dms[2]) {
+                return null;
+            }
+
+            const degrees = dms[0];
+            const minutes = dms[1];
+            const seconds = dms[2];
+
+            let decimal = degrees + minutes / 60 + seconds / 3600;
+
+            if (ref === 'S' || ref === 'W') {
+                decimal *= -1;
+            }
+
+            return decimal;
+        }
+
+        // 3. 이미지 메타데이터 추출 (EXIF 데이터 포함)
+        function extractImageMetadata(file, dataUrl, img) {
+            const imageData = {
+                id: Date.now() + Math.random(),
+                name: file.name,
+                dataUrl: dataUrl,
+                uploadDate: new Date().toLocaleString('ko-KR'),
+                latitude: null,
+                longitude: null,
+                description: '',
+                hasGPS: false,
+                make: ''
+            };
+
+            // 이미지 요소에 EXIF 데이터 읽기
+            EXIF.getData(img, function() {
+                try {
+                    const allMetaData = EXIF.getAllTags(this);
+                    console.log('📋 EXIF 데이터:', allMetaData);
+                    
+                    // Make (촬영 기기) 정보
+                    if (allMetaData.Make) {
+                        imageData.make = allMetaData.Make;
+                        console.log(`📱 촬영기기: ${allMetaData.Make}`);
+                    }
+
+                    // GPS 데이터 추출
+                    const gpsData = extractGPSFromExif(this);
+                    
+                    if (gpsData) {
+                        imageData.latitude = gpsData.latitude;
+                        imageData.longitude = gpsData.longitude;
+                        imageData.hasGPS = true;
+                        console.log(`✓ GPS 정보 감지: (${gpsData.latitude.toFixed(4)}, ${gpsData.longitude.toFixed(4)})`);
+                    } else {
+                        console.log('ℹ 이 이미지에는 GPS 정보가 없습니다.');
+                    }
+                } catch (error) {
+                    console.error('EXIF 처리 중 오류:', error);
+                }
+
+                images.push(imageData);
+                addImageToList(imageData, images.length - 1);
+                
+                // GPS 정보가 있을 때만 지도에 마커 생성
+                if (imageData.hasGPS) {
+                    createMapMarker(imageData, images.length - 1);
+                }
+            });
+        }
+
+        // 4. 이미지를 목록에 추가
+        function addImageToList(imageData, index) {
+            const listContainer = document.getElementById('imageList');
+            
+            // 처음 이미지 추가 시 안내 텍스트 제거
+            if (images.length === 1) {
+                listContainer.innerHTML = '';
+            }
+
+            const imageItem = document.createElement('div');
+            imageItem.className = 'image-item';
+            imageItem.id = `image-item-${index}`;
+            imageItem.innerHTML = `
+                <img src="${imageData.dataUrl}" class="image-thumbnail">
+                <div class="image-info">
+                    <div class="image-title">
+                        ${imageData.name}
+                        <span class="gps-badge ${imageData.hasGPS ? 'detected' : 'not-detected'}">
+                            ${imageData.hasGPS ? '✓ GPS' : '✗ GPS'}
+                        </span>
+                    </div>
+                    <div class="image-date">📅 ${imageData.uploadDate}</div>
+                    <div class="image-location ${!imageData.latitude ? 'no-location' : ''}">
+                        📍 ${imageData.latitude ? `${imageData.latitude.toFixed(4)}, ${imageData.longitude.toFixed(4)}` : '위치 정보 없음'}
+                    </div>
+                </div>
+            `;
+
+            imageItem.addEventListener('click', () => selectImage(index));
+            listContainer.appendChild(imageItem);
+        }
+
+        // 5. 이미지 선택 시 지도 중심 이동
+        function selectImage(index) {
+            const imageData = images[index];
+            
+            // 이전 선택 제거
+            if (currentSelectedIndex >= 0) {
+                const prevItem = document.getElementById(`image-item-${currentSelectedIndex}`);
+                if (prevItem) prevItem.classList.remove('active');
+            }
+
+            // 현재 선택 표시
+            currentSelectedIndex = index;
+            const currentItem = document.getElementById(`image-item-${index}`);
+            if (currentItem) currentItem.classList.add('active');
+
+            // 위치 데이터가 있으면 지도 중심 이동
+            if (imageData.latitude && imageData.longitude) {
+                const newPosition = new naver.maps.LatLng(imageData.latitude, imageData.longitude);
+                map.setCenter(newPosition);
+                map.setZoom(15);
+
+                // 해당 마커를 강조 표시
+                if (markers[index]) {
+                    // 마커에 이벤트 트리거 (필요시)
+                    markers[index].marker.openInfoWindow(markers[index].infoWindow);
+                }
+            }
+        }
+
+        // 6. 지도에 마커 생성
+        function createMapMarker(imageData, index) {
+            // GPS 정보가 없으면 마커 생성 불가
+            if (!imageData.latitude || !imageData.longitude) {
+                console.log('⚠ GPS 정보가 없어 마커를 생성할 수 없습니다.');
+                return;
+            }
+
+            const markerPosition = new naver.maps.LatLng(imageData.latitude, imageData.longitude);
+            
+            const marker = new naver.maps.Marker({
+                position: markerPosition,
+                map: map,
+                title: imageData.name,
+                icon: {
+                    url: 'https://maps.google.com/mapfiles/ms/icons/red-dot.png',
+                    size: new naver.maps.Size(32, 32),
+                    scaledSize: new naver.maps.Size(32, 32)
+                }
+            });
+
+            // 정보 윈도우 (마커 클릭 시 표시)
+            const infoWindow = new naver.maps.InfoWindow({
+                content: `
+                    <div class="marker-info-popup">
+                        <h3>${imageData.name}</h3>
+                        <p>📅 ${imageData.uploadDate}</p>
+                        <p>📍 ${imageData.latitude.toFixed(4)}, ${imageData.longitude.toFixed(4)}</p>
+                    </div>
+                `,
+                backgroundColor: '#ffffff',
+                borderColor: '#4CAF50',
+                borderWidth: 2
+            });
+
+            // 마커 클릭 이벤트
+            naver.maps.Event.addListener(marker, 'click', function() {
+                selectImage(index);
+                infoWindow.open(map, marker);
+            });
+
+            // 마커와 정보 윈도우 저장
+            markers[index] = { marker, infoWindow };
+        }
+
+        // 초기 지도 중심 설정
+        window.addEventListener('load', function() {
+            map.setCenter(new naver.maps.LatLng(37.3595704, 127.105399));
+        });
+    </script>
 </body>
 </html>
